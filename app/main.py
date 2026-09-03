@@ -24,4 +24,19 @@ def read_root() -> dict[str, str]:
 def health_check() -> dict[str, str]:
     """Confirm that the API process is running."""
     # A successful request receives HTTP 200 and this JSON response body.
-    return {"status": "healthy"}
+    return {
+        "status": "healthy",
+        "version": "0.1.0"
+        }
+
+        
+# The about endpoint that returns information about the API
+@app.get("/about", tags=["General"], summary="About the API")
+def about_info() -> dict[str, str]:
+    """Return API Info"""
+    # A successful request returns the name and module 
+    return {
+        "name": "Project and Task Management API",
+        "module": "01"
+        }
+
