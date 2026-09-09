@@ -28,6 +28,13 @@ def list_tasks() -> list[Task]:
     return tasks
 
 
+# GET /tasks/completed returns task with completed tasks is true
+@router.get("/completed", summary="Returns completed tasks")
+def get_completed_tasks() -> list[Task]:
+    """Return tasks when completed value is true"""
+    return [task for task in tasks if task["completed"]]
+
+
 # GET /tasks/{task_id} reads one Task identified by its path parameter.
 @router.get("/{task_id}", summary="Get one task")
 def get_task(task_id: int) -> Task:

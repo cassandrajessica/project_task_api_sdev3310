@@ -27,6 +27,13 @@ def list_projects() -> list[Project]:
     return projects
 
 
+# GET /projects/count returns the amount of projects
+@router.get("/count", summary="The amount of projects")
+def get_project_count() -> dict[str, int]:
+    """Return the number of projects currently stored."""
+    return {"count": len(projects)}
+
+
 # The value inside {project_id} is supplied by the URL path.
 @router.get("/{project_id}", summary="Get one project")
 def get_project(project_id: int) -> Project:
