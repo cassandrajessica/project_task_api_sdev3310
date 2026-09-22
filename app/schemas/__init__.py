@@ -1,0 +1,1 @@
+"""Pydantic schemas that define the Library Management System API's data contracts ."""
