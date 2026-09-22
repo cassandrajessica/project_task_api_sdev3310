@@ -13,9 +13,10 @@ class TaskBase(BaseModel):
         str_strip_whitespace=True,
     )
 
-    title: str = Field(min_length=1, max_length=120)
+    title: str = Field(min_length=1, max_length=60)
     description: str = Field(min_length=1, max_length=500)
     completed: bool = False
+    priority: int = Field(default=3, ge=1, le=5)
     project_id: int = Field(gt=0)
 
 
