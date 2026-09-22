@@ -20,7 +20,7 @@ assignments will add database persistence, testing, security, and deployment.
 Clone the project and switch to the assignment branch:
 
 ```bash
-git clone <your-repository-url>
+git clone https://github.com/cassandrajessica/project_task_api_sdev3310/tree/assignment-1
 cd project-task-api
 git switch assignment-1
 ```
