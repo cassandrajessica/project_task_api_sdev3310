@@ -31,7 +31,7 @@ app = FastAPI(
         "shows how FastAPI turns routes, Pydantic schemas, and operation metadata "
         "into an OpenAPI contract."
     ),
-    version="0.4.0",
+    version="0.4.1",
     openapi_tags=tags_metadata,
 )
 
@@ -50,8 +50,10 @@ def read_root() -> dict[str, str]:
 
 
 # The health endpoint gives clients a simple way to confirm the API is running.
-@app.get("/health", tags=["General"], summary="Check API health")
+@app.get("/health", tags=["General"], summary="Check API health", description="Confirm that the API process is running.")
 def health_check() -> dict[str, str]:
     """Confirm that the API process is running."""
     # A successful request receives HTTP 200 and this JSON response body.
-    return {"status": "healthy"}
+    return {
+        "status": "healthy",
+        }
