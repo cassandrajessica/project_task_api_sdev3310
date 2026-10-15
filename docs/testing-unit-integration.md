@@ -17,7 +17,7 @@ That command means:
 ```text
 uv runs pytest
 pytest discovers tests/
-pytest runs unit and integration tests
+pytest runs unit, integration, and conformance tests
 pytest reports the results
 ```
 
@@ -69,6 +69,10 @@ tests/
             ├── test_database.py
             └── test_in_memory.py
 ```
+
+Module 07 adds `tests/conformance/`. See
+[Conformance and Contract Testing](testing-conformance-contract.md) for that
+test level and its layout.
 
 The `test_` prefix is a pytest convention. Pytest automatically discovers files named `test_*.py` and functions named `test_*`.
 
@@ -186,7 +190,7 @@ A service can be tested directly because it owns decisions such as “a Task's P
 The directory that contains a `conftest.py` determines which tests can use its fixtures:
 
 ```text
-tests/conftest.py              -> unit and integration tests
+tests/conftest.py              -> unit, integration, and conformance tests
 tests/integration/conftest.py  -> integration tests only
 ```
 
@@ -355,3 +359,4 @@ This makes a failing test report meaningful before someone opens the test file.
 |---|---|---|
 | Unit | Does a Python-level rule work in isolation? | A Project with Tasks cannot be deleted. |
 | Integration | Do persistence and API layers work together with PostgreSQL? | Create a Project, then retrieve it over HTTP. |
+| Conformance | Does the client-visible API follow its published contract? | Validate `/openapi.json` and selected API responses. |

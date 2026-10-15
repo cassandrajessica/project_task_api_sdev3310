@@ -47,7 +47,7 @@ If you have not already cloned the repository, run:
 cd "$HOME"
 git clone https://github.com/dr2619-collin/project-task-api.git
 cd project-task-api
-git switch module-06
+git switch module-07
 ```
 
 If the project is already cloned, skip these commands and open a terminal in
@@ -100,9 +100,9 @@ psql -d postgres -f scripts/setup_database.sql
 
 The script creates the local database user account `postgres` with password `postgres` when it does not already exist, then creates the `project_task` database owned by that account. It leaves existing resources in place, so it is safe to run again.
 
-## 6. Install Docker Desktop for Module 06 testing
+## 6. Install Docker Desktop for automated testing
 
-For Module 06, Docker Desktop runs the PostgreSQL integration tests.
+Docker Desktop runs the PostgreSQL integration and conformance tests.
 Testcontainers starts a temporary PostgreSQL container automatically; it does
 not use the local `project_task` database.
 
