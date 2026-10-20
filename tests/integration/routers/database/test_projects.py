@@ -57,6 +57,10 @@ def test_delete_project_removes_the_public_resource(database_client: TestClient)
     assert list_response.status_code == 200
     assert list_response.json() == []
 
+    get_response = database_client.get(f"/projects/{project['id']}")
+    assert get_response.status_code == 404
+    assert get_response.json()["detail"]
+
 
 def test_list_project_tasks_returns_related_tasks(database_client: TestClient) -> None:
     """The related-resource endpoint returns Tasks for the requested Project."""
