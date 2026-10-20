@@ -1,50 +1,28 @@
 """HTTP endpoints for the Members resource."""
 
-from fastapi import APIRouter, HTTPException, Response, status
+from fastapi import APIRouter, Depends, Response, status
 
-from app.schemas.members import MemberInput, MemberResponse
+from app.dependencies import get_member_service
+from app.exceptions import (
+    MemberEmailAlreadyExistsError,
+    MemberHasBooksError,
+    MemberNotFoundError,
+    MembershipIdAlreadyExistsError,
+)
+from app.models.book import Book
+from app.models.member import Member
+from app.routers.http_errors import (
+    member_email_exists,
+    member_has_books,
+    member_not_found,
+    membership_id_exists,
+)
 from app.schemas.books import BookResponse
-from app.storage import members, books
+from app.schemas.members import MemberInput, MemberResponse
+from app.services.members import MemberService
 
-
+# Routers validate input, call services, and translate outcomes to HTTP.
 router = APIRouter(prefix="/members", tags=["Members"])
-
-
-def find_member(member_id: int) -> MemberResponse:
-    """Find one member or return an HTTP 404 error to the client."""
-    for member in members:
-        if member.id == member_id:
-            return member
-
-    raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail="Member not found",
-    )
-
-
-def check_unique_member(
-    email: str,
-    membership_id: str,
-    exclude_id: int | None = None,
-) -> None:
-    """Reject an email or membership ID already used by another member.
-
-    exclude_id lets an update skip the member being edited so it does not
-    conflict with its own existing values.
-    """
-    for member in members:
-        if member.id == exclude_id:
-            continue
-        if member.email == email:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="A member with this email already exists",
-            )
-        if member.membership_id == membership_id:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="A member with this membership ID already exists",
-            )
 
 
 # GET /members reads the entire Member collection.
@@ -54,9 +32,11 @@ def check_unique_member(
     summary="List all members",
     description="Return every member currently stored by the application.",
 )
-def list_members() -> list[MemberResponse]:
-    """Return every member currently stored in memory."""
-    return members
+def list_members(
+    service: MemberService = Depends(get_member_service),
+) -> list[Member]:
+    """Delegate Member retrieval to the service layer."""
+    return service.list_members()
 
 
 # The value inside {member_id} is supplied by the URL path.
@@ -67,9 +47,15 @@ def list_members() -> list[MemberResponse]:
     description="Return the member identified by the path parameter.",
     responses={404: {"description": "Member not found"}},
 )
-def get_member(member_id: int) -> MemberResponse:
-    """Return the member with the requested ID."""
-    return find_member(member_id)
+def get_member(
+    member_id: int,
+    service: MemberService = Depends(get_member_service),
+) -> Member:
+    """Return one Member or translate the missing-resource error."""
+    try:
+        return service.get_member(member_id)
+    except MemberNotFoundError:
+        raise member_not_found() from None
 
 
 # POST creates a new resource, so a successful request returns HTTP 201.
@@ -81,16 +67,17 @@ def get_member(member_id: int) -> MemberResponse:
     description="Create a member from a validated name, email, membership ID, and phone number.",
     responses={409: {"description": "Email or membership ID already in use"}},
 )
-def create_member(data: MemberInput) -> MemberResponse:
-    """Create a member from a validated JSON request body."""
-    check_unique_member(data.email, data.membership_id)
-    next_member_id = max((member.id for member in members), default=0) + 1
-    member = MemberResponse(
-        id=next_member_id,
-        **data.model_dump(),
-    )
-    members.append(member)
-    return member
+def create_member(
+    data: MemberInput,
+    service: MemberService = Depends(get_member_service),
+) -> Member:
+    """Create a Member after the service verifies uniqueness."""
+    try:
+        return service.create_member(data)
+    except MemberEmailAlreadyExistsError:
+        raise member_email_exists() from None
+    except MembershipIdAlreadyExistsError:
+        raise membership_id_exists() from None
 
 
 # PUT replaces the editable values of the Member identified by the URL.
@@ -107,16 +94,17 @@ def create_member(data: MemberInput) -> MemberResponse:
 def replace_member(
     member_id: int,
     data: MemberInput,
-) -> MemberResponse:
-    """Replace the editable fields of an existing member."""
-    member = find_member(member_id)
-    check_unique_member(data.email, data.membership_id, exclude_id=member_id)
-    updated_member = MemberResponse(
-        id=member_id,
-        **data.model_dump(),
-    )
-    members[members.index(member)] = updated_member
-    return updated_member
+    service: MemberService = Depends(get_member_service),
+) -> Member:
+    """Replace one Member through the service layer."""
+    try:
+        return service.replace_member(member_id, data)
+    except MemberNotFoundError:
+        raise member_not_found() from None
+    except MemberEmailAlreadyExistsError:
+        raise member_email_exists() from None
+    except MembershipIdAlreadyExistsError:
+        raise membership_id_exists() from None
 
 
 # A successful DELETE has no response body, so it returns HTTP 204.
@@ -130,18 +118,17 @@ def replace_member(
         409: {"description": "Member still has related books"},
     },
 )
-def delete_member(member_id: int) -> Response:
-    """Remove a member from the in-memory collection."""
-    member = find_member(member_id)
-
-    # Do not leave Books pointing to a Member that no longer exists.
-    if any(book.member_id == member_id for book in books):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Delete the member's books before deleting the member",
-        )
-
-    members.remove(member)
+def delete_member(
+    member_id: int,
+    service: MemberService = Depends(get_member_service),
+) -> Response:
+    """Translate Member deletion outcomes into HTTP responses."""
+    try:
+        service.delete_member(member_id)
+    except MemberNotFoundError:
+        raise member_not_found() from None
+    except MemberHasBooksError:
+        raise member_has_books() from None
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -153,7 +140,12 @@ def delete_member(member_id: int) -> Response:
     description="Return every book that belongs to the requested member.",
     responses={404: {"description": "Member not found"}},
 )
-def list_member_books(member_id: int) -> list[BookResponse]:
-    """Return every book associated with the requested member."""
-    find_member(member_id)
-    return [book for book in books if book.member_id == member_id]
+def list_member_books(
+    member_id: int,
+    service: MemberService = Depends(get_member_service),
+) -> list[Book]:
+    """Return related Books after the service verifies the Member."""
+    try:
+        return service.list_member_books(member_id)
+    except MemberNotFoundError:
+        raise member_not_found() from None
