@@ -2,7 +2,7 @@
 
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.exceptions import ProjectHasTasksError, ProjectNotFoundError
+from app.exceptions import (ProjectHasTasksError, ProjectNameAlreadyExistsError, ProjectNotFoundError,)
 from app.models.project import Project
 from app.models.task import Task
 from app.repositories.projects import ProjectRepository
@@ -35,7 +35,10 @@ class DatabaseProjectService(ProjectService):
     def create_project(self, data: ProjectInput) -> Project:
         # begin() commits on success and rolls back if an exception escapes.
         with self._session_factory.begin() as session:
-            project = ProjectRepository(session).create(data)
+            repository = ProjectRepository(session)
+            if repository.get_by_name(data.name) is not None:
+                raise ProjectNameAlreadyExistsError
+            project = repository.create(data)
             session.refresh(project)
             return project
 

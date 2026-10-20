@@ -14,11 +14,17 @@ class ProjectRepository:
         self.session = session
 
     def list_all(self) -> list[Project]:
-        statement = select(Project).order_by(Project.id)
+        statement = select(Project).order_by(Project.name)
         return list(self.session.scalars(statement))
 
     def get_by_id(self, project_id: int) -> Project | None:
         return self.session.get(Project, project_id)
+
+
+    def get_by_name(self, name: str) -> Project | None:
+        statement = select(Project).where(Project.name == name)
+        return self.session.scalars(statement).first()
+
 
     def create(self, data: ProjectInput) -> Project:
         project = Project(**data.model_dump())

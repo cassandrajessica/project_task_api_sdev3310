@@ -15,3 +15,7 @@ class TaskNotFoundError(Exception):
 
 class ProjectHasTasksError(Exception):
     """Signal that a Project cannot be deleted while Tasks reference it."""
+
+
+class ProjectNameAlreadyExistsError(Exception):
+    """Signal that a Project with this name already exists."""

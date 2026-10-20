@@ -3,10 +3,18 @@
 from fastapi import APIRouter, Depends, Response, status
 
 from app.dependencies import get_project_service
-from app.exceptions import ProjectHasTasksError, ProjectNotFoundError
+from app.exceptions import (
+    ProjectHasTasksError,
+    ProjectNameAlreadyExistsError,
+    ProjectNotFoundError,
+)
 from app.models.project import Project
 from app.models.task import Task
-from app.routers.http_errors import project_has_tasks, project_not_found
+from app.routers.http_errors import (
+    project_has_tasks,
+    project_name_exists,
+    project_not_found,
+)
 from app.schemas.projects import ProjectInput, ProjectResponse
 from app.schemas.tasks import TaskResponse
 from app.services.projects import ProjectService
@@ -54,14 +62,17 @@ def get_project(
     status_code=status.HTTP_201_CREATED,
     summary="Create a project",
     description="Create a project from a validated name and description.",
+    responses={409: {"description": "Project name already exists"}},
 )
 def create_project(
     data: ProjectInput,
     service: ProjectService = Depends(get_project_service),
 ) -> Project:
     """Pass validated input to the business and persistence layers."""
-    return service.create_project(data)
-
+    try:
+        return service.create_project(data)
+    except ProjectNameAlreadyExistsError:
+        raise project_name_exists() from None
 
 # PUT replaces the editable values of the Project identified by the URL.
 @router.put(
