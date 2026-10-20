@@ -1,6 +1,12 @@
 """Request and response schemas for the Book resource."""
 
+from datetime import date
+
 from pydantic import BaseModel, ConfigDict, Field
+
+# Evaluated when the application starts, so the upper bound moves forward each
+# year without a code change.
+CURRENT_YEAR = date.today().year
 
 
 class BookBase(BaseModel):
@@ -26,12 +32,13 @@ class BookBase(BaseModel):
     )
     isbn: str = Field(
         min_length=1,
+        max_length=20,
         description="The book's ISBN. Must be unique.",
         examples=["978-0135957059"],
     )
     published_year: int = Field(
         ge=1450,
-        le=2026,
+        le=CURRENT_YEAR,
         description="The year the book was published (1450 to the current year).",
         examples=[2019],
     )
