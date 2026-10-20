@@ -82,3 +82,16 @@ def test_get_project_translates_missing_repository_result(
     with when(database_module).ProjectRepository(session).thenReturn(repository):
         with pytest.raises(ProjectNotFoundError):
             DatabaseProjectService(factory).get_project(999)
+
+
+def test_list_projects_returns_empty_list_when_repository_is_empty(
+    session_factory: tuple[object, object, object],
+) -> None:
+    factory, session, repository = session_factory
+    when(repository).list_all().thenReturn([])
+
+    with when(database_module).ProjectRepository(session).thenReturn(repository):
+        result = DatabaseProjectService(factory).list_projects()
+
+    assert result == []
+    verify(repository, times=1).list_all()
