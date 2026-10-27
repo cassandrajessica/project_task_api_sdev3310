@@ -68,8 +68,8 @@ def test_create_project_rejects_invalid_boundary_values(
 
 @pytest.mark.parametrize(
     "path",
-    ["/projects/not-an-integer", "/tasks/not-an-integer"],
-    ids=["project-id", "task-id"],
+    ["/projects/not-an-integer", "/tasks/not-an-integer", "/projects/0.5"],
+    ids=["project-id", "task-id", "project-id-decimal"],
 )
 def test_typed_path_parameters_reject_wrong_data_type(
     database_client: TestClient,

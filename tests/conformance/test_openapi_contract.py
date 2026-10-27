@@ -134,6 +134,18 @@ def test_create_project_matches_its_documented_public_response(
     assert project["description"] == "Verify the documented Project response."
 
 
+def test_create_task_matches_its_documented_public_response(
+    database_client: TestClient,
+) -> None:
+    """A created Task has the documented response shape and parent Project id."""
+    project = create_project(database_client)
+    task = create_task(database_client, project["id"])
+
+    assert set(task) == {"id", "title", "description", "completed", "project_id"}
+    assert isinstance(task["id"], int)
+    assert task["project_id"] == project["id"]
+
+
 def test_missing_project_matches_documented_not_found_response(
     database_client: TestClient,
 ) -> None:
