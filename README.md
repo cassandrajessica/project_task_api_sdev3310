@@ -8,15 +8,35 @@ Member can have many Books.
 This project was built for SDEV 3310. Assignment 1 created the REST API with
 Pydantic validation and temporary in-memory storage. Assignment 2 adds
 PostgreSQL persistence and reorganizes the code into layers, so Library data
-now survives an API restart. Later assignments will add testing, security, and
-deployment.
+now survives an API restart. Assignment 3 adds an automated test suite
+(unit, integration, OpenAPI conformance, negative, and security tests) and
+protects every Book and Member operation with classroom Bearer tokens and two
+roles. Later assignments will add deployment.
+
+## Assignment 3 scope
+
+Every Book and Member operation now requires a Bearer token. Two predefined
+classroom identities are configured in `.env`:
+
+- **member** may read Books and Members (`GET`).
+- **admin** may also create, replace, and delete them (`POST`, `PUT`, `DELETE`).
+
+These request roles are separate from the Member records stored by the Library.
+The root endpoint, health endpoint, and API documentation remain public.
+
+This milestone deliberately uses two static, environment-configured tokens. It
+does not include a user database, password login, OAuth provider, JWT issuance,
+async conversion, or database migrations.
 
 ## Requirements
 
 - Python 3.13 (pinned in `.python-version`; `uv` installs it if needed)
 - [uv](https://docs.astral.sh/uv/) for environment and dependency management
 - [PostgreSQL](https://www.postgresql.org/download/), running locally on the
-  default port `5432`
+  default port `5432` (needed to run the API with the database backend)
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/), running
+  (needed by the integration and conformance tests; see
+  [Run automated tests](#run-automated-tests))
 
 Start PostgreSQL before running the API:
 
@@ -32,7 +52,7 @@ Start PostgreSQL before running the API:
 ```bash
 git clone https://github.com/cassandrajessica/project_task_api_sdev3310.git
 cd project_task_api_sdev3310
-git switch assignment-2
+git switch assignment-3
 ```
 
 ### 2. Install dependencies
@@ -43,7 +63,9 @@ uv sync
 
 `uv` installs the correct Python version when needed, creates the virtual
 environment, and installs the dependencies recorded in `uv.lock`, including
-SQLAlchemy 2.x, Psycopg, and pydantic-settings.
+SQLAlchemy 2.x, Psycopg, and pydantic-settings. It also installs the `dev`
+dependency group used by the tests: pytest, Testcontainers, Mockito,
+openapi-spec-validator, and Schemathesis.
 
 ### 3. Create the database
 
@@ -80,6 +102,8 @@ On Windows PowerShell, use `copy .env.example .env`.
 | `STORAGE_BACKEND` | `database` | `database` stores data in PostgreSQL. `memory` stores data in Python lists that reset when the API stops. |
 | `DATABASE_URL` | none | PostgreSQL connection URL. Required when `STORAGE_BACKEND=database`. |
 | `DATABASE_ECHO_SQL` | `false` | Set to `true` to print the SQL that SQLAlchemy runs in the terminal. |
+| `DEMO_MEMBER_TOKEN` | `member-demo-token` | Bearer token for the read-only member role. |
+| `DEMO_ADMIN_TOKEN` | `admin-demo-token` | Bearer token for the administrator role. |
 
 The URL in `.env.example` matches the database created by the setup script:
 
@@ -91,6 +115,9 @@ It reads as `driver://username:password@host:port/database`. The
 `postgres:postgres` credentials are for local development only and should never
 be reused in production. `.env` is listed in `.gitignore` and must not be
 committed.
+
+The token values in `.env.example` are classroom demonstration values. They
+show how authentication and authorization work and are not production secrets.
 
 Settings are loaded and validated once when the API starts. An unsupported
 `STORAGE_BACKEND` value, or a missing `DATABASE_URL` while the database backend
@@ -115,6 +142,54 @@ psql -h localhost -U postgres -d library -c '\dt'
 Enter the password `postgres` if prompted. The result should list `books` and
 `members`.
 
+## Run automated tests
+
+Start Docker Desktop before running the full suite. Testcontainers uses Docker
+to start a disposable PostgreSQL container for the test session and removes it
+when the run finishes. Tests never connect to your local `library` development
+database.
+
+Run every test from the repository root:
+
+```bash
+uv run pytest
+```
+
+The first run may take longer while Docker downloads the `postgres:18` image.
+Each integration test starts with empty tables (or a fresh in-memory store), so
+tests do not depend on each other or on execution order.
+
+```text
+pytest
+  -> Testcontainers starts temporary PostgreSQL
+  -> TestClient sends API requests to the in-process app
+  -> pytest checks the responses
+  -> Testcontainers removes PostgreSQL
+```
+
+The suite has three levels:
+
+| Level | Folder | What it checks | Needs Docker |
+| --- | --- | --- | --- |
+| Unit | `tests/unit/` | Pydantic schema rules, both service implementations (database services use Mockito test doubles), and the token and role dependencies | No |
+| Integration | `tests/integration/` | Repositories against real PostgreSQL (generated IDs, unique constraints, the Member-to-Book foreign key), every endpoint through `TestClient` on both storage backends, and 401/403 behavior | Yes, except `routers/memory/` |
+| Conformance | `tests/conformance/` | The `/openapi.json` document, Schemathesis-generated `GET` requests, negative requests (422, 404, 409 with unchanged data), and the published security contract | Yes |
+
+Run one level or folder at a time:
+
+```bash
+uv run pytest tests/unit
+uv run pytest tests/integration
+uv run pytest tests/integration/routers/memory
+uv run pytest tests/conformance
+```
+
+Run one file:
+
+```bash
+uv run pytest tests/integration/repositories/test_books.py
+```
+
 ## Explore the API
 
 The same OpenAPI contract is available three ways:
@@ -123,23 +198,59 @@ The same OpenAPI contract is available three ways:
 - `http://localhost:8000/redoc`: ReDoc reference documentation
 - `http://localhost:8000/openapi.json`: the machine-readable OpenAPI document
 
+All three are public.
+
+### Authorize in Swagger UI
+
+Open `http://localhost:8000/docs`, select **Authorize**, and enter a token from
+your `.env` file. Swagger UI then adds the `Authorization: Bearer ...` header to
+every protected request.
+
+- `member-demo-token` can use every `GET` endpoint.
+- `admin-demo-token` can use every endpoint.
+
+### Example Bearer requests
+
+```bash
+# Public: no token needed
+curl http://localhost:8000/health
+
+# 401: missing token
+curl -i http://localhost:8000/books
+
+# 200: the member role can read
+curl -H "Authorization: Bearer member-demo-token" http://localhost:8000/books
+
+# 403: the member role cannot write
+curl -i -X DELETE -H "Authorization: Bearer member-demo-token" \
+  http://localhost:8000/books/1
+
+# 201: the admin role can write
+curl -X POST http://localhost:8000/members \
+  -H "Authorization: Bearer admin-demo-token" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Ada Lovelace", "email": "ada@example.com", "membership_id": "LIB-1", "phone": "555-123-4567"}'
+```
+
+On Windows PowerShell, use `curl.exe` and put the command on one line.
+
 ## Endpoints
 
-| Method | URL | Purpose | Success status |
-| --- | --- | --- | --- |
-| GET | `/` | API introduction | 200 OK |
-| GET | `/health` | Health check | 200 OK |
-| GET | `/members` | List all members | 200 OK |
-| GET | `/members/{member_id}` | Get one member | 200 OK |
-| POST | `/members` | Create a member | 201 Created |
-| PUT | `/members/{member_id}` | Replace a member | 200 OK |
-| DELETE | `/members/{member_id}` | Delete a member | 204 No Content |
-| GET | `/members/{member_id}/books` | List a member's books | 200 OK |
-| GET | `/books` | List all books | 200 OK |
-| GET | `/books/{book_id}` | Get one book | 200 OK |
-| POST | `/books` | Create a book | 201 Created |
-| PUT | `/books/{book_id}` | Replace a book | 200 OK |
-| DELETE | `/books/{book_id}` | Delete a book | 204 No Content |
+| Method | URL | Purpose | Access | Success status |
+| --- | --- | --- | --- | --- |
+| GET | `/` | API introduction | Public | 200 OK |
+| GET | `/health` | Health check | Public | 200 OK |
+| GET | `/members` | List all members | member, admin | 200 OK |
+| GET | `/members/{member_id}` | Get one member | member, admin | 200 OK |
+| POST | `/members` | Create a member | admin | 201 Created |
+| PUT | `/members/{member_id}` | Replace a member | admin | 200 OK |
+| DELETE | `/members/{member_id}` | Delete a member | admin | 204 No Content |
+| GET | `/members/{member_id}/books` | List a member's books | member, admin | 200 OK |
+| GET | `/books` | List all books | member, admin | 200 OK |
+| GET | `/books/{book_id}` | Get one book | member, admin | 200 OK |
+| POST | `/books` | Create a book | admin | 201 Created |
+| PUT | `/books/{book_id}` | Replace a book | admin | 200 OK |
+| DELETE | `/books/{book_id}` | Delete a book | admin | 204 No Content |
 
 ## Members
 
@@ -225,6 +336,10 @@ constraint in PostgreSQL.
 
 ## Error responses
 
+- A missing, malformed, or unknown token on a protected endpoint returns
+  401 Unauthorized with a `WWW-Authenticate: Bearer` header.
+- A valid member token on a write endpoint returns 403 Forbidden. Denied
+  requests never change Library data.
 - Requesting a Member or Book that does not exist returns 404 Not Found.
 - A duplicate `email`, `membership_id`, or `isbn` returns 409 Conflict.
 - Deleting a Member that still has Books returns 409 Conflict.
@@ -249,7 +364,7 @@ Try a validation error by sending this to `POST /members`:
 
 With `STORAGE_BACKEND=database`:
 
-1. Create a Member and a Book in Swagger UI.
+1. Authorize with the admin token, then create a Member and a Book in Swagger UI.
 2. Stop the server with `Ctrl+C` and start it again.
 3. Call `GET /members` and `GET /books`. The records you created are still
    there.
@@ -284,12 +399,19 @@ PostgreSQL     durable Members and Books
 
 | Layer | Location | Responsibility |
 | --- | --- | --- |
+| Authentication | `app/auth/` | Map Bearer tokens to the member or admin role and reject requests with 401 or 403 before a route calls a service. |
 | Routers | `app/routers/` | Receive validated requests, call a service, and convert service exceptions into HTTP responses. |
 | Schemas | `app/schemas/` | Define the API contract: request validation and response shapes. |
 | Services | `app/services/` | Apply Library rules such as uniqueness, related-Member checks, and blocked Member deletion. Each resource has an abstract contract plus database and in-memory implementations. |
 | Repositories | `app/repositories/` | Run SQLAlchemy queries and writes for one table. |
 | ORM models | `app/models/` | Define the `members` and `books` tables, constraints, and relationship. |
 | Database and configuration | `app/database/`, `app/config.py` | Create the engine and session factory and load typed settings. |
+
+Token handling stays at the HTTP boundary. Routes declare the `CurrentUser`
+(any valid token) or `AdminUser` (admin token only) dependency from
+`app/auth/dependencies.py`. The Book and Member services never receive tokens
+or roles, so they stay focused on Library business rules and are shared by both
+storage backends unchanged.
 
 At startup, `app/main.py` reads the settings, creates the services for the
 selected backend, and stores them on application state. Routes receive them
@@ -307,6 +429,10 @@ then writes is saved completely or not at all.
 ```
 project_task_api_sdev3310/
 ├── app/
+│   ├── auth/
+│   │   ├── __init__.py
+│   │   ├── dependencies.py
+│   │   └── users.py
 │   ├── database/
 │   │   ├── __init__.py
 │   │   └── session.py
@@ -348,6 +474,37 @@ project_task_api_sdev3310/
 │   └── main.py
 ├── scripts/
 │   └── setup_database.sql
+├── tests/
+│   ├── conformance/
+│   │   ├── test_authentication_authorization_contract.py
+│   │   ├── test_negative_requests.py
+│   │   └── test_openapi_contract.py
+│   ├── integration/
+│   │   ├── repositories/
+│   │   │   ├── test_books.py
+│   │   │   └── test_members.py
+│   │   ├── routers/
+│   │   │   ├── database/
+│   │   │   │   ├── test_books.py
+│   │   │   │   └── test_members.py
+│   │   │   └── memory/
+│   │   │       ├── test_books.py
+│   │   │       └── test_members.py
+│   │   └── test_authentication_authorization_api.py
+│   ├── unit/
+│   │   ├── auth/
+│   │   │   └── test_dependencies.py
+│   │   ├── schemas/
+│   │   │   ├── test_books.py
+│   │   │   └── test_members.py
+│   │   └── services/
+│   │       ├── books/
+│   │       │   ├── test_database.py
+│   │       │   └── test_in_memory.py
+│   │       └── members/
+│   │           ├── test_database.py
+│   │           └── test_in_memory.py
+│   └── conftest.py
 ├── .env.example
 ├── .gitignore
 ├── .python-version
@@ -356,6 +513,12 @@ project_task_api_sdev3310/
 └── README.md
 ```
 
+- `app/auth/users.py` maps the configured tokens to the member and admin
+  roles; `app/auth/dependencies.py` turns that into reusable FastAPI
+  dependencies and the 401/403 responses published in OpenAPI.
+- `tests/conftest.py` holds the shared fixtures: the Testcontainers database,
+  per-test table resets, `database_client` and `memory_client`, and the
+  `member_headers` and `admin_headers` Bearer headers.
 - `app/exceptions.py` defines the application outcomes services raise, such as
   a missing Member or a duplicate ISBN.
 - `app/routers/http_errors.py` converts those outcomes into HTTP responses.
