@@ -1,7 +1,7 @@
 [project]
 name = "library-management-api"
-version = "0.2.0"
-description = "Library Management System API with PostgreSQL persistence"
+version = "0.3.0"
+description = "Library Management System API with PostgreSQL persistence, automated tests, and role-based access"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -10,4 +10,23 @@ dependencies = [
     "psycopg[binary]>=3.2.0",
     "pydantic-settings>=2.0.0",
     "sqlalchemy>=2.0.0",
+]
+
+[tool.pytest.ini_options]
+# This course project keeps the importable application package in ./app instead
+# of installing it as a distribution. Add the repository root while pytest runs.
+pythonpath = ["."]
+testpaths = ["tests"]
+# Test files can share a source-mirrored name such as test_books.py because
+# pytest imports each test module by its full path instead of a top-level name.
+addopts = ["--import-mode=importlib"]
+
+[dependency-groups]
+dev = [
+    "httpx2>=2.10.0",
+    "mockito>=1.5.4",
+    "openapi-spec-validator>=0.9.0",
+    "pytest>=9.1.1",
+    "schemathesis>=4.24.3",
+    "testcontainers[postgres]>=4.15.0",
 ]
