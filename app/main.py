@@ -67,9 +67,11 @@ app = FastAPI(
     description=(
         "Manage library members and the books they have borrowed. Data is "
         "stored in PostgreSQL by default, with an in-memory option for "
-        "temporary local use."
+        "temporary local use. Book and Member operations require a classroom "
+        "Bearer token: both roles may read, and only the administrator may "
+        "create, replace, or delete."
     ),
-    version="0.2.0",
+    version="0.3.0",
     openapi_tags=tags_metadata,
     lifespan=lifespan,
 )
@@ -80,6 +82,7 @@ app.include_router(members_router)
 app.include_router(books_router)
 
 
+# Root and health stay public, as do /docs, /redoc, and /openapi.json.
 # This decorator connects an HTTP GET request for "/" to read_root().
 @app.get("/", tags=["General"], summary="Introduce the API")
 def read_root() -> dict[str, str]:
